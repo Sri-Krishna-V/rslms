@@ -19,6 +19,19 @@ from ..models.user import User, UserRole
 from .jwt_handler import get_current_user
 
 
+# Role permission mapping for extensibility
+ROLE_PERMISSIONS = {
+    UserRole.ADMIN: {"admin", "librarian", "member"},
+    UserRole.LIBRARIAN: {"librarian", "member"},
+    UserRole.MEMBER: {"member"},
+}
+
+
+def has_permission(user: User, required_roles):
+    """Check if user has one of the required roles (extensible for future roles)"""
+    return user.role.value in required_roles
+
+
 def get_current_active_user(current_user: User = Depends(get_current_user)) -> User:
     """
     Dependency to get the current active user
@@ -44,7 +57,8 @@ def get_current_active_user(current_user: User = Depends(get_current_user)) -> U
             return user
         ```
     """
-    if not current_user.is_active:
+    # Fix: Use instance attribute, not SQLAlchemy Column
+    if hasattr(current_user, 'is_active') and not bool(getattr(current_user, 'is_active')):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Inactive user"
@@ -81,7 +95,7 @@ def get_current_admin_user(current_user: User = Depends(get_current_active_user)
             return {"message": f"User {user_id} deleted by admin {admin.username}"}
         ```
     """
-    if current_user.role != UserRole.ADMIN:
+    if not has_permission(current_user, {UserRole.ADMIN.value}):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not enough permissions"
@@ -118,7 +132,7 @@ def get_current_librarian_user(current_user: User = Depends(get_current_active_u
             return {"message": f"Book added by {staff.username}"}
         ```
     """
-    if current_user.role not in [UserRole.LIBRARIAN, UserRole.ADMIN]:
+    if not has_permission(current_user, {UserRole.LIBRARIAN.value, UserRole.ADMIN.value}):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not enough permissions"
@@ -193,9 +207,17 @@ def get_owner_or_admin(resource_owner_id_field: str) -> Callable:
     ) -> User:
         resource_owner_id = path_params.get(resource_owner_id_field)
 
-        # Allow if user is admin or the owner of the resource
-        if (current_user.role == UserRole.ADMIN or
-                current_user.id == int(resource_owner_id)):
+        # Fix: Safely handle None and type conversion
+        is_admin = current_user.role == UserRole.ADMIN
+        is_owner = False
+        user_id_val = getattr(current_user, 'id', None)
+        if resource_owner_id is not None and user_id_val is not None:
+            try:
+                is_owner = int(user_id_val) == int(resource_owner_id)
+            except (TypeError, ValueError):
+                is_owner = False
+
+        if bool(is_admin) or bool(is_owner):
             return current_user
 
         raise HTTPException(

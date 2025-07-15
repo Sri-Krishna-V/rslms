@@ -14,6 +14,21 @@ class UserRole(str, Enum):
     LIBRARIAN = "librarian"
     MEMBER = "member"
 
+# Permission Matrix (for reference)
+# ---------------------------------
+# ADMIN:
+#   - Full system access
+#   - Can manage users, books, loans, system settings
+#   - Can assign/revoke roles
+# LIBRARIAN:
+#   - Can manage books and loans
+#   - Can assist users
+#   - Cannot manage users or system settings
+# MEMBER:
+#   - Can view and manage own account
+#   - Can borrow and view own loans
+#   - Cannot manage other users, books, or system settings
+
 
 class User(Base):
     """User model for library members and staff"""

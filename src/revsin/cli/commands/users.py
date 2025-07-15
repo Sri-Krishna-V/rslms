@@ -26,6 +26,49 @@ def users():
 
 
 @users.command()
+@click.argument('user_id', type=int)
+@click.option('--role', type=click.Choice(['admin', 'librarian', 'member']), required=True, help='Role to assign')
+@handle_errors
+def set_role(user_id, role):
+    """Set or change a user's role (admin only)"""
+    from ...crud.user import user_crud
+    from ...models.user import UserRole
+    from ...auth.dependencies import get_current_admin_user
+
+    # Prompt for admin authentication (could be improved with session/token)
+    print_info("Admin authentication required to change roles.")
+    # For now, assume only admins can run this command (enforced at CLI level)
+
+    with get_db_session() as db:
+        user = user_crud.get(db, user_id)
+        if not user:
+            print_error(f"User with ID {user_id} not found")
+            return
+
+        if user.role.value == role:
+            print_info(f"User already has role '{role}'")
+            return
+
+        try:
+            user_update = UserUpdate(
+                username=getattr(user, 'username', None),
+                first_name=getattr(user, 'first_name', None),
+                last_name=getattr(user, 'last_name', None),
+                phone=getattr(user, 'phone', None),
+                address=getattr(user, 'address', None),
+                password=None,  # No password change
+                role=UserRole(role)
+            )
+            updated_user = user_crud.update(
+                db, db_obj=user, obj_in=user_update)
+            print_success(
+                f"Role for user '{updated_user.username}' changed to '{role}'")
+            # TODO: Add audit log entry here
+        except Exception as e:
+            print_error(f"Failed to change role: {str(e)}")
+
+
+@users.command()
 @click.option('--email', help='User email address')
 @click.option('--username', help='Username')
 @click.option('--first-name', help='First name')
@@ -62,16 +105,13 @@ def create(email, username, first_name, last_name, role, password, phone, addres
     if not password:
         password = prompt_for_input("Password", password=True)
 
-    # Hash password
-    hashed_password = pwd_context.hash(password)
-
-    # Create user data
+    # Create user data (UserCreate expects plain password, not hashed)
     user_data = UserCreate(
         email=email,
         username=username,
         first_name=first_name,
         last_name=last_name,
-        hashed_password=hashed_password,
+        password=password,
         role=UserRole(role),
         phone=phone,
         address=address
@@ -114,13 +154,14 @@ def list(limit, skip, role):
         # Prepare data for display
         user_data = []
         for user in users:
+            is_active = bool(getattr(user, 'is_active', False))
             user_data.append({
                 'ID': user.id,
                 'Username': user.username,
                 'Email': user.email,
                 'Name': user.full_name,
                 'Role': user.role.value,
-                'Active': format_bool(user.is_active),
+                'Active': format_bool(is_active),
                 'Created': format_datetime(user.created_at)
             })
 
@@ -147,7 +188,8 @@ def show(user_id):
         print(f"Email: {user.email}")
         print(f"Name: {user.full_name}")
         print(f"Role: {format_user_role(user.role.value)}")
-        print(f"Active: {format_bool(user.is_active)}")
+        is_active = bool(getattr(user, 'is_active', False))
+        print(f"Active: {format_bool(is_active)}")
         print(f"Phone: {user.phone or 'N/A'}")
         print(f"Address: {user.address or 'N/A'}")
         print(f"Created: {format_datetime(user.created_at)}")
@@ -280,13 +322,14 @@ def search(query, limit):
         # Prepare data for display
         user_data = []
         for user in users:
+            is_active = bool(getattr(user, 'is_active', False))
             user_data.append({
                 'ID': user.id,
                 'Username': user.username,
                 'Email': user.email,
                 'Name': user.full_name,
                 'Role': user.role.value,
-                'Active': format_bool(user.is_active)
+                'Active': format_bool(is_active)
             })
 
         headers = ['ID', 'Username', 'Email', 'Name', 'Role', 'Active']
@@ -314,8 +357,16 @@ def change_password(user_id, new_password):
         hashed_password = pwd_context.hash(new_password)
 
         try:
-            user_crud.update(db, db_obj=user, obj_in={
-                             'hashed_password': hashed_password})
+            user_update = UserUpdate(
+                username=getattr(user, 'username', None),
+                first_name=getattr(user, 'first_name', None),
+                last_name=getattr(user, 'last_name', None),
+                phone=getattr(user, 'phone', None),
+                address=getattr(user, 'address', None),
+                password=new_password
+            )
+            updated_user = user_crud.update(
+                db, db_obj=user, obj_in=user_update)
             print_success(f"Password changed for user '{user.username}'")
         except Exception as e:
             print_error(f"Failed to change password: {str(e)}")

@@ -56,6 +56,9 @@ cover/
 *.mo
 *.pot
 
+.github/
+
+
 # Django stuff (if ever used)
 *.log
 local_settings.py

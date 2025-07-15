@@ -234,6 +234,13 @@ RevSin's CLI provides a **delightful terminal experience**:
      - Profile, loan history
      - Browse catalog, manage loans
 
+.. note::
+   **Permission Matrix**
+   
+   - **Admin**: Full system access, can manage users, books, loans, system settings, assign/revoke roles
+   - **Librarian**: Can manage books and loans, assist users, cannot manage users or system settings
+   - **Member**: Can view/manage own account, borrow/view own loans, cannot manage other users, books, or system settings
+
 💡 Common Workflows
 ===================
 
